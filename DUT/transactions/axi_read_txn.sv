@@ -1,4 +1,3 @@
-
 class axi_read_txn extends axi_base_txn;
   `uvm_object_utils(axi_read_txn)
 
@@ -23,3 +22,4 @@ class axi_read_txn extends axi_base_txn;
   endfunction
 
 endclass
+
