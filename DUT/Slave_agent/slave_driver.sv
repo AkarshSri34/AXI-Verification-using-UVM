@@ -5,12 +5,15 @@ class axi_slave_driver extends uvm_driver #(axi_slave_txn);
   
   bit [3:0] saved_awid;
   bit [3:0] saved_arid;
+  bit [7:0] saved_arlen;
   
 
-  bit [31:0] mem [0:1023];
+  bit [31:0] mem [0:1023];    // MEMORY //
   
+  int rcount;
   int wcount;
   logic [31:0] waddr_base;
+  logic [31:0] raddr_base;
 
   // WRITE FSM
   typedef enum {W_IDLE, W_DATA, W_RESP} w_state_t;
@@ -20,7 +23,6 @@ class axi_slave_driver extends uvm_driver #(axi_slave_txn);
   typedef enum {R_IDLE, R_DATA} r_state_t;
   r_state_t rstate;
 
-  int rcount;
   
   function new(string n, uvm_component p);
     super.new(n,p);
@@ -82,19 +84,26 @@ class axi_slave_driver extends uvm_driver #(axi_slave_txn);
         W_DATA: begin
           vif.WREADY <= 1;
 
-          if (vif.WVALID && vif.WREADY && vif.WLAST) begin
-            vif.WREADY <= 0;
-            wstate <= W_RESP;
+          if (vif.WVALID && vif.WREADY ) begin
+             mem[((waddr_base >> 2) + wcount) % 1024] <= vif.WDATA; // WRITE EVERY BEAT
+            wcount++;
+            
+            $display("WRITE: addr=%h index=%0d data=%h",waddr_base,(waddr_base >> 2) + wcount,vif.WDATA);
+            
+            if (vif.WLAST) begin
+              vif.WREADY <= 0;
+              wstate <= W_RESP;
+            end
           end
         end
 
         // -------- WRITE RESPONSE --------
         W_RESP: begin
           vif.BVALID <= 1;
+          vif.BID    <= saved_awid;
 
-          if (vif.BVALID && vif.BREADY) begin
+          if (vif.BREADY) begin
             vif.BVALID <= 0;
-            vif.BID    <= saved_awid;
             wstate <= W_IDLE;
           end
         end
@@ -112,35 +121,54 @@ class axi_slave_driver extends uvm_driver #(axi_slave_txn);
           vif.RVALID  <= 0;
           vif.RLAST   <= 0;
           rcount      <= 0;
+          
 
           if (vif.ARVALID && vif.ARREADY) begin
-            saved_arid <= vif.ARID;
-            vif.ARREADY <= 0;
-            vif.RVALID  <= 1;
-            rstate <= R_DATA;
+            saved_arid   <= vif.ARID;
+            saved_arlen  <= vif.ARLEN;     // <<< SAVE ARLEN
+            raddr_base   <= vif.ARADDR;    // <<< FIX ADDRESS ALSO
+            vif.ARREADY  <= 0;
+            vif.RVALID   <= 1;
+            rcount       <= 0;
+            rstate       <= R_DATA;
           end
         end
 
-        // -------- READ DATA --------
+        // ------------------------------ READ DATA -----------------------------------
         R_DATA: begin
-          if (vif.RVALID && vif.RREADY) begin
-            vif.RDATA <= $random;
-            vif.RID   <= saved_arid;
-            rcount++;
+          vif.RVALID <= 1;
+          vif.RID    <= saved_arid;
+          vif.RRESP  <= 2'b00;
+          
+          vif.RDATA <= mem[((raddr_base >> 2) + rcount) % 1024];
+          
+          $display("READ: addr=%h index=%0d data=%h",raddr_base,(raddr_base >> 2) + rcount,mem[(raddr_base >> 2) + rcount]);
 
-            if (rcount == vif.ARLEN) begin
-              vif.RLAST  <= 1;
-              vif.RVALID <= 0;
-              vif.RLAST  <= 0;
-              vif.ARREADY <= 1;
-              rstate <= R_IDLE;
+
+          if (vif.RVALID && vif.RREADY) begin
+           // vif.RDATA <= mem[(raddr_base >> 2) + rcount];
+            //vif.RDATA   <= vif.WDATA;
+            if (rcount == saved_arlen) begin
+              vif.RLAST   <= 1;
+              rstate      <= R_IDLE;
+              vif.ARREADY <=1;
+              rcount      <=0;
             end
+            else begin
+              vif.RLAST <= 0;
+              rcount++;
+            end
+
+//             else begin
+//               rcount++;
+//       		  vif.RLAST <= 0;
+//             end
           end
         end
-
       endcase
 
     end
   endtask
 
 endclass
+
