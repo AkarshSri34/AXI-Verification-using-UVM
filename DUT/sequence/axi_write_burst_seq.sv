@@ -5,7 +5,9 @@ class axi_write_burst_seq extends uvm_sequence #(axi_write_txn);
   bit [7:0]  last_awlen;     // burst length - 1
   bit [2:0]  last_awsize;    // bytes per beat
   bit [1:0]  last_awburst; 
-
+  
+  axi_write_txn tx_queue[$];
+  
   function new(string name="axi_write_burst_seq");
     super.new(name);
   endfunction
@@ -14,7 +16,8 @@ class axi_write_burst_seq extends uvm_sequence #(axi_write_txn);
   
     axi_write_txn tx;
     
-    repeat (1) begin
+    
+    repeat (2) begin
       tx = axi_write_txn::type_id::create("tx");
       start_item(tx);
       tx.randomize(); 
@@ -24,6 +27,9 @@ class axi_write_burst_seq extends uvm_sequence #(axi_write_txn);
       last_awburst = tx.awburst;
       finish_item(tx);
       
+      tx_queue.push_back(tx);
+      
     end
   endtask
 endclass
+
