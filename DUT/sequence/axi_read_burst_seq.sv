@@ -1,31 +1,35 @@
 class axi_read_burst_seq extends uvm_sequence #(axi_read_txn);
   `uvm_object_utils(axi_read_burst_seq)
 
-  bit [31:0] start_addr;
-  bit [7:0]  start_len;
-  bit [2:0]  start_size;
-  bit [1:0]  start_burst;
+  // Receive write transactions from test
+  axi_write_txn write_queue[$];
 
-  
   function new(string name="axi_read_burst_seq");
     super.new(name);
   endfunction
 
   task body();
-     axi_read_txn rtx;
-    repeat (1) begin
-      rtx = axi_read_txn::type_id::create("tx");
+    axi_read_txn rtx;
+
+    foreach (write_queue[i]) begin
+
+      rtx = axi_read_txn::type_id::create($sformatf("rtx_%0d", i));
 
       start_item(rtx);
-      if (!rtx.randomize() with { araddr == start_addr;
-                                  arlen   == start_len;
-                                  arsize  == start_size;
-                                  arburst == start_burst;})
-        begin
+
+      if (!rtx.randomize() with {
+            araddr  == write_queue[i].awaddr;
+            arlen   == write_queue[i].awlen;
+            arsize  == write_queue[i].awsize;
+            arburst == write_queue[i].awburst;
+          })
+      begin
         `uvm_error("READ_SEQ", "Randomization failed")
       end
+
       finish_item(rtx);
+
     end
   endtask
-
 endclass
+
