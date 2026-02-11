@@ -13,13 +13,28 @@ class axi_write_test extends uvm_test;
   endfunction
 
   task run_phase(uvm_phase phase);
-    axi_write_burst_seq seq;
 
-    phase.raise_objection(this);
+  axi_write_burst_seq seq;
+  axi_read_burst_seq  rseq;
 
-    seq = axi_write_burst_seq::type_id::create("seq");
-    seq.start(env.agent.sequencer);
+  phase.raise_objection(this);
 
-    phase.drop_objection(this);
-  endtask
+  // Create sequences
+  seq  = axi_write_burst_seq::type_id::create("seq");
+  rseq = axi_read_burst_seq ::type_id::create("rseq");
+
+  // Start WRITE sequence
+  seq.start(env.agent.sequencer);
+
+  // Pass full write transaction queue to READ sequence
+  rseq.write_queue = seq.tx_queue;
+
+  // Start READ sequence (it will loop internally)
+  rseq.start(env.agent.sequencer);
+
+  phase.drop_objection(this);
+
+endtask
+
 endclass
+
