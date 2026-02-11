@@ -26,3 +26,4 @@ class axi_write_txn extends axi_base_txn;
   endfunction
 
 endclass
+
