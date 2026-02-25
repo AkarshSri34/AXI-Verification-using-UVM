@@ -14,6 +14,10 @@ class axi_slave_driver extends uvm_driver #(axi_slave_txn);
   int wcount;
   logic [31:0] waddr_base;
   logic [31:0] raddr_base;
+  
+  int awready_delay;
+  int wready_delay;
+  int arready_delay;
 
   // WRITE FSM
   typedef enum {W_IDLE, W_DATA, W_RESP} w_state_t;
@@ -42,6 +46,10 @@ class axi_slave_driver extends uvm_driver #(axi_slave_txn);
     
     wcount      = 0;
     waddr_base  = 0;
+    
+    awready_delay=0;
+    wready_delay =0;
+    
 
     vif.AWREADY <= 0;
     vif.WREADY  <= 0;
@@ -67,11 +75,19 @@ class axi_slave_driver extends uvm_driver #(axi_slave_txn);
 
         // -------- WRITE IDLE --------
         W_IDLE: begin
-          vif.AWREADY <= 1;
+          
+          if (awready_delay == 0)
+            vif.AWREADY <= 1;
+          else begin
+            vif.AWREADY <= 0;
+            awready_delay--;
+          end
+          
           vif.WREADY  <= 0;
           vif.BVALID  <= 0;
 
           if (vif.AWVALID && vif.AWREADY) begin
+            awready_delay = $urandom_range(0,3);
             saved_awid <= vif.AWID;
             vif.AWREADY <= 0;
             waddr_base  <= vif.AWADDR;   // <<< SAVE ADDRESS
@@ -82,14 +98,18 @@ class axi_slave_driver extends uvm_driver #(axi_slave_txn);
 
         // -------- WRITE DATA --------
         W_DATA: begin
-          vif.WREADY <= 1;
+          if (wready_delay == 0)
+            vif.WREADY <= 1;
+          else begin
+            vif.WREADY <= 0;
+            wready_delay--;
+          end
 
           if (vif.WVALID && vif.WREADY ) begin
              mem[((waddr_base >> 2) + wcount) % 1024] <= vif.WDATA; // WRITE EVERY BEAT
             wcount++;
             
-            $display("WRITE: addr=%h index=%0d data=%h",waddr_base,(waddr_base >> 2) + wcount,vif.WDATA);
-            
+            `uvm_info(get_type_name(),$sformatf("WRITE: addr=%h index=%0d data=%h",waddr_base,(waddr_base >> 2) + wcount,vif.WDATA),UVM_LOW)            
             if (vif.WLAST) begin
               vif.WREADY <= 0;
               wstate <= W_RESP;
@@ -120,8 +140,7 @@ class axi_slave_driver extends uvm_driver #(axi_slave_txn);
           vif.ARREADY <= 1;
           vif.RVALID  <= 0;
           vif.RLAST   <= 0;
-          rcount      <= 0;
-          
+          rcount      <= 0;         
 
           if (vif.ARVALID && vif.ARREADY) begin
             saved_arid   <= vif.ARID;
@@ -136,39 +155,30 @@ class axi_slave_driver extends uvm_driver #(axi_slave_txn);
 
         // ------------------------------ READ DATA -----------------------------------
         R_DATA: begin
-          vif.RVALID <= 1;
-          vif.RID    <= saved_arid;
-          vif.RRESP  <= 2'b00;
-          
-          vif.RDATA <= mem[((raddr_base >> 2) + rcount) % 1024];
-          
-          $display("READ: addr=%h index=%0d data=%h",raddr_base,(raddr_base >> 2) + rcount,mem[(raddr_base >> 2) + rcount]);
 
+  vif.RVALID <= 1;
+  vif.RID    <= saved_arid;
+  vif.RRESP  <= 2'b00;
+  vif.RDATA  <= mem[((raddr_base >> 2) + rcount) % 1024];
 
-          if (vif.RVALID && vif.RREADY) begin
-           // vif.RDATA <= mem[(raddr_base >> 2) + rcount];
-            //vif.RDATA   <= vif.WDATA;
-            if (rcount == saved_arlen) begin
-              vif.RLAST   <= 1;
-              rstate      <= R_IDLE;
-              vif.ARREADY <=1;
-              rcount      <=0;
-            end
-            else begin
-              vif.RLAST <= 0;
-              rcount++;
-            end
+  // Assert RLAST combinationally based on counter
+  vif.RLAST <= (rcount == saved_arlen);
 
-//             else begin
-//               rcount++;
-//       		  vif.RLAST <= 0;
-//             end
-          end
-        end
+  if (vif.RVALID && vif.RREADY) begin
+    
+    `uvm_info(get_type_name(),$sformatf("READ: addr=%h index=%0d data=%h", raddr_base,(raddr_base >> 2) + rcount,vif.RDATA),UVM_LOW)
+    if (rcount == saved_arlen) begin
+      // LAST beat handshake completed
+      rstate <= R_IDLE;
+      rcount <= 0;
+    end
+    else begin
+      rcount++;
+    end
+  end
+end
       endcase
-
     end
   endtask
 
 endclass
-
