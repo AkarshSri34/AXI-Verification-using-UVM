@@ -35,7 +35,7 @@ module top;
   initial begin
   $dumpfile("dump.vcd"); 
   $dumpvars;
-  #1000 $finish;
+  #2000 $finish;
 end
 
 
