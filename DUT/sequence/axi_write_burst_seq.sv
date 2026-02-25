@@ -17,7 +17,7 @@ class axi_write_burst_seq extends uvm_sequence #(axi_write_txn);
     axi_write_txn tx;
     
     
-    repeat (2) begin
+    repeat (3) begin
       tx = axi_write_txn::type_id::create("tx");
       start_item(tx);
       tx.randomize(); 
